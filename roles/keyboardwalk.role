@@ -14,7 +14,8 @@ nuclear_role(
   platform::cm740::HardwareIO
   input::SensorFilter
   # Motion
-  motion::QuinticWalk
+  motion::walk::MovementController
+  motion::walk::StaticWalk
   motion::ScriptEngine
   motion::HeadController
   # Behaviour

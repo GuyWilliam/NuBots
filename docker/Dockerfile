@@ -332,6 +332,11 @@ ENV NVIDIA_DRIVER_CAPABILITIES=all
 # Copy the nvidia OpenCL vendorfile into the container so we can also use OpenCL on nvidia GPUs
 COPY --chown=root:root etc/OpenCL/vendors/nvidia.icd /etc/OpenCL/vendors/nvidia.icd
 
+# TODO: Install python from source too
+# TODO: Eventually move these to the right spot in the dockerfile
+# Install Pybind for python modules
+RUN install-from-source https://github.com/pybind/pybind11/archive/refs/tags/v2.6.2.tar.gz
+
 ##############################
 ### SETUP THE USER ACCOUNT ###
 ##############################

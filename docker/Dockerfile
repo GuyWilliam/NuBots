@@ -308,7 +308,8 @@ RUN pip install \
     stringcase \
     Pillow \
     protobuf==3.17.3 \
-    tqdm
+    tqdm \
+    clang==11
 
 # Install tools needed for building individual modules as well as development tools
 RUN install-package \

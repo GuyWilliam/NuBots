@@ -20,6 +20,9 @@
 #ifndef MODULES_INPUT_GAMECONTROLLERDATA_HPP
 #define MODULES_INPUT_GAMECONTROLLERDATA_HPP
 
+#include <array>
+#include <ostream>
+
 namespace module::input::gamecontroller {
     constexpr const size_t MAX_NUM_PLAYERS        = 11;
     constexpr const size_t SPL_COACH_MESSAGE_SIZE = 253;

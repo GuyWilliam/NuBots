@@ -33,7 +33,7 @@
 #include "message/actuation/KinematicsModel.hpp"
 #include "message/actuation/Limbs.hpp"
 #include "message/actuation/LimbsIK.hpp"
-#include "message/actuation/ServoCommand.hpp"
+#include "message/actuation/Servos.hpp"
 #include "message/behaviour/Behaviour.hpp"
 #include "message/behaviour/state/Stability.hpp"
 #include "message/behaviour/state/WalkState.hpp"
@@ -118,11 +118,11 @@ namespace module::skill {
         for (int id = 0; id < ServoID::NUMBER_OF_SERVOS; ++id) {
             // Sets the leg gains
             if ((id >= ServoID::R_HIP_YAW) && (id < ServoID::HEAD_YAW)) {
-                cfg.servo_states[id] = ServoState(config["gains"]["legs"].as<double>(), 100);
+                cfg.servo_states[id] = ServoState(config["gains"]["legs"].as<double>(), 100, 0.0);
             }
             // Sets the arm gains
             if (id < ServoID::R_HIP_YAW) {
-                cfg.servo_states[id] = ServoState(config["gains"]["arms"].as<double>(), 100);
+                cfg.servo_states[id] = ServoState(config["gains"]["arms"].as<double>(), 100, 0.0);
             }
         }
 

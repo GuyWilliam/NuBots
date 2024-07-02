@@ -5,5 +5,8 @@ log_level: INFO
 force_playing: false
 
 # The position of the robot
-# GOALIE, STRIKER, DEFENDER
-position: DEFENDER
+# GOALIE, STRIKER, DEFENDER, DYNAMIC
+position: DYNAMIC
+
+# The number of seconds to wait before assuming a teammate is inactive
+timeout: 8

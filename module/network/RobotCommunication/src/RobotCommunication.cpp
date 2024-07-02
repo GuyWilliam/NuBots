@@ -39,6 +39,7 @@
 #include "message/localisation/Field.hpp"
 #include "message/skill/Kick.hpp"
 #include "message/support/GlobalConfig.hpp"
+#include "message/input/Purposes.hpp"
 
 #include "utility/math/euler.hpp"
 
@@ -51,6 +52,8 @@ namespace module::network {
     using message::input::GameState;
     using message::input::RoboCup;
     using message::input::Sensors;
+    using message::input::Purposes;
+    using message::input::SoccerPosition;
     using message::localisation::Ball;
     using message::localisation::Field;
     using message::skill::Kick;
@@ -101,6 +104,7 @@ namespace module::network {
            Optional<With<Sensors>>,
            Optional<With<Field>>,
            Optional<With<GameState>>,
+           Optional<With<Purposes>>,
            Optional<With<GlobalConfig>>>()
             .then([this](const std::shared_ptr<const Ball>& loc_ball,
                          const std::shared_ptr<const WalkState>& walk_state,
@@ -108,6 +112,7 @@ namespace module::network {
                          const std::shared_ptr<const Sensors>& sensors,
                          const std::shared_ptr<const Field>& field,
                          const std::shared_ptr<const GameState>& game_state,
+                         const std::shared_ptr<const Purposes>& purposes,
                          const std::shared_ptr<const GlobalConfig>& config) {
                 auto msg = std::make_unique<RoboCup>();
 
@@ -183,7 +188,13 @@ namespace module::network {
 
                 // TODO: Robots. Where the robot thinks the other robots are. This doesn't exist yet.
 
+                // Current purposes (soccer positions) of the Robots
+                if (purposes) {
+                    msg->purpose_commands = *purposes;
+                }
+
                 emit<Scope::UDP>(msg, cfg.broadcast_ip, cfg.send_port);
             });
     }
+
 }  // namespace module::network

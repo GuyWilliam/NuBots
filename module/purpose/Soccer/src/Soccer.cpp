@@ -190,10 +190,10 @@ namespace module::purpose {
                 }
             }
 
-            if (is_active) {
+            if (robots[player_id - 1].is_active) {
                 log<NUClear::DEBUG>("Is active true");
             }
-            if (!is_active) {
+            if (!robots[player_id - 1].is_active) {
                 log<NUClear::DEBUG>("Is active false");
             }
         });
@@ -210,7 +210,7 @@ namespace module::purpose {
         on<Trigger<RoboCup>>().then([this](const RoboCup& robocup) {
             // Save info from incoming robocup message
             uint8_t incoming_robot_id                      = robocup.current_pose.player_id;
-            robots[incoming_robot_id - 1].last_update_time = now;
+            robots[incoming_robot_id - 1].last_update_time = NUClear::clock::now();
             robots[incoming_robot_id - 1].is_active        = robocup.purpose_commands.is_active;
             robots[incoming_robot_id - 1].startup_time     = robocup.purpose_commands.startup_time;
 

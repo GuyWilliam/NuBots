@@ -184,7 +184,7 @@ namespace module::purpose {
             // Check if we have heard from robots periodically, and update their status if not
             auto now = NUClear::clock::now();
             for (std::size_t i = 0; i < robots.size(); ++i) {
-                if ((i + 1) != player_id && now - robots[i].last_update_time > cfg.timeout) {
+                if ((i + 1) != player_id && (now - robots[i].last_update_time).count() > cfg.timeout) {
                     log<NUClear::DEBUG>("Update player to inactive: ", int(i + 1));
                     robots[i].is_active = false;
                 }

@@ -18,6 +18,8 @@ export class LocalisationNetwork {
   constructor(private network: Network, private model: LocalisationModel) {
     this.network.on(message.input.Sensors, this.onSensors);
     this.network.on(message.localisation.Field, this.onField);
+    this.network.on(message.vision.FieldLines, this.onFieldLines);
+    this.network.on(message.behaviour.state.WalkState, this.onWalkState);
     this.network.on(message.localisation.Ball, this.onBall);
     this.network.on(message.localisation.Robots, this.onRobots);
     this.network.on(message.vision.FieldLines, this.onFieldLines);
@@ -61,6 +63,13 @@ export class LocalisationNetwork {
   private onFieldLines(robotModel: RobotModel, fieldLines: message.vision.FieldLines) {
     const robot = LocalisationRobotModel.of(robotModel);
     robot.fieldLinePoints.rPWw = fieldLines.rPWw.map((rPWw) => Vector3.from(rPWw));
+  }
+
+  @action.bound
+  private onWalkState(robotModel: RobotModel, walkState: message.behaviour.state.WalkState) {
+    const robot = LocalisationRobotModel.of(robotModel);
+    robot.swingFootTrajectory.rSPp = walkState.swingFootTrajectory.map((rSPp) => Vector3.from(rSPp));
+    robot.torsoTrajectory.rTPp = walkState.torsoTrajectory.map((rTPp) => Vector3.from(rTPp));
   }
 
   @action.bound
@@ -118,9 +127,9 @@ export class LocalisationNetwork {
     }
 
     const robot = LocalisationRobotModel.of(robotModel);
-
     const { rotation: Rwt } = decompose(new THREE.Matrix4().copy(fromProtoMat44(sensors.Htw!)).invert());
     robot.Htw = Matrix4.from(sensors.Htw);
+    robot.Hwp = Matrix4.from(sensors.Hwp);
     robot.Hrw = Matrix4.from(sensors.Hrw);
     robot.Rwt = new Quaternion(Rwt.x, Rwt.y, Rwt.z, Rwt.w);
 

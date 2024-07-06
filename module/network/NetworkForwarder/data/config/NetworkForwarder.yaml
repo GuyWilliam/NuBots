@@ -41,3 +41,4 @@ targets:
     message.nuclear.ReactionStatistics: false
 
     message.planning.WalkToDebug: true
+    message.behaviour.state.WalkState: true

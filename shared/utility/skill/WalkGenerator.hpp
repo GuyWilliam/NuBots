@@ -158,7 +158,6 @@ namespace utility::skill {
 
         /**
          * @brief Get the left or right foot pose at the given time in the torso {t} frame.
-         * @param t Time.
          * @param limb Limb ID of foot to get pose of.
          * @return Swing foot pose at time t.
          */

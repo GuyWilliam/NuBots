@@ -37,6 +37,7 @@
 #include "message/skill/ControlFoot.hpp"
 #include "message/skill/Walk.hpp"
 
+#include "utility/input/FrameID.hpp"
 #include "utility/input/LimbID.hpp"
 #include "utility/math/euler.hpp"
 #include "utility/nusight/NUhelpers.hpp"
@@ -56,9 +57,11 @@ namespace module::skill {
     using message::input::Sensors;
     using message::skill::ControlLeftFoot;
     using message::skill::ControlRightFoot;
-    using WalkTask  = message::skill::Walk;
+    using WalkTask = message::skill::Walk;
+    using message::input::Sensors;
     using WalkState = message::behaviour::state::WalkState;
 
+    using utility::input::FrameID;
     using utility::input::LimbID;
     using utility::input::ServoID;
     using utility::math::euler::mat_to_rpy_intrinsic;
@@ -78,6 +81,7 @@ namespace module::skill {
             cfg.walk_generator_parameters.step_width      = config["walk"]["step"]["width"].as<double>();
             cfg.walk_generator_parameters.torso_height    = config["walk"]["torso"]["height"].as<double>();
             cfg.walk_generator_parameters.torso_pitch     = config["walk"]["torso"]["pitch"].as<Expression>();
+            cfg.desired_torso_pitch = Eigen::Matrix<double, 1, 1>(cfg.walk_generator_parameters.torso_pitch);
             cfg.walk_generator_parameters.torso_position_offset =
                 config["walk"]["torso"]["position_offset"].as<Expression>();
             cfg.walk_generator_parameters.torso_sway_offset = config["walk"]["torso"]["sway_offset"].as<Expression>();
@@ -91,6 +95,28 @@ namespace module::skill {
             // Reset the walk engine and last update time
             walk_generator.reset();
             last_update_time = NUClear::clock::now();
+
+            // Controller gains
+            cfg.arm_servo_gain   = config["gains"]["arm_servo_gain"].as<double>();
+            cfg.leg_servo_gain   = config["gains"]["leg_servo_gain"].as<double>();
+            cfg.torso_pid_gains  = config["gains"]["torso_pid_gains"].as<Expression>();
+            cfg.torso_antiwindup = config["gains"]["torso_antiwindup"].as<Expression>();
+            cfg.pitch_pid_gains  = config["gains"]["pitch_pid_gains"].as<Expression>();
+            cfg.pitch_antiwindup = config["gains"]["pitch_antiwindup"].as<Expression>();
+
+            // Configure torso PID controller
+            torso_controller       = utility::math::control::PID<double, 2>(cfg.torso_pid_gains[0],
+                                                                      cfg.torso_pid_gains[1],
+                                                                      cfg.torso_pid_gains[2],
+                                                                      cfg.torso_antiwindup[0],
+                                                                      cfg.torso_antiwindup[1]);
+            cfg.torso_filter_alpha = config["gains"]["torso_filter_alpha"].as<double>();
+            // Configure pitch PID controller
+            pitch_controller = utility::math::control::PID<double, 1>(cfg.pitch_pid_gains[0],
+                                                                      cfg.pitch_pid_gains[1],
+                                                                      cfg.pitch_pid_gains[2],
+                                                                      cfg.pitch_antiwindup[0],
+                                                                      cfg.pitch_antiwindup[1]);
 
             // Configure the arms
             for (auto id : utility::input::LimbID::servos_for_arms()) {
@@ -140,6 +166,14 @@ namespace module::skill {
                         .count();
                 last_update_time = NUClear::clock::now();
 
+                // Update torso pitch controller
+                auto measured_pitch =
+                    Eigen::Matrix<double, 1, 1>(MatrixToEulerIntrinsic(sensors.Htw.inverse().rotation()).y());
+                auto pitch_offset =
+                    pitch_controller.update(cfg.desired_torso_pitch, measured_pitch, time_delta)(0, 0) * time_delta;
+                cfg.walk_generator_parameters.torso_pitch = cfg.walk_generator_parameters.torso_pitch + pitch_offset;
+                walk_generator.set_parameters(cfg.walk_generator_parameters);
+
 
                 // Update the walk engine and emit the stability state, only if not falling/fallen
                 if (stability >= Stability::DYNAMIC) {
@@ -158,15 +192,40 @@ namespace module::skill {
                 const NUClear::clock::time_point goal_time =
                     NUClear::clock::now() + Per<std::chrono::seconds>(UPDATE_FREQUENCY);
 
-                // Get desired feet poses in the torso {t} frame from the walk engine
-                Eigen::Isometry3d Htl = walk_generator.get_foot_pose(LimbID::LEFT_LEG);
-                Eigen::Isometry3d Htr = walk_generator.get_foot_pose(LimbID::RIGHT_LEG);
+                // Construct leg IK tasks
+                auto left_leg   = std::make_unique<LeftLegIK>();
+                auto right_leg  = std::make_unique<RightLegIK>();
+                left_leg->time  = goal_time;
+                right_leg->time = goal_time;
+                for (auto id : utility::input::LimbID::servos_for_limb(LimbID::LEFT_LEG)) {
+                    left_leg->servos[id] = ServoState(cfg.leg_servo_gain, 100);
+                }
+                for (auto id : utility::input::LimbID::servos_for_limb(LimbID::RIGHT_LEG)) {
+                    right_leg->servos[id] = ServoState(cfg.leg_servo_gain, 100);
+                }
 
                 // Construct ControlFoot tasks
                 emit<Task>(std::make_unique<ControlLeftFoot>(Htl, goal_time));
                 emit<Task>(std::make_unique<ControlRightFoot>(Htr, goal_time));
 
-                // Construct Arm IK tasks
+                const Eigen::Isometry3d Htl_measured(sensors.Htx[FrameID::L_FOOT_BASE]);
+                const Eigen::Isometry3d Htr_measured(sensors.Htx[FrameID::R_FOOT_BASE]);
+
+                // Set desired foot poses in the torso {t} frame and apply torso offsets to keep the robot balanced
+                left_leg->Htl  = walk_generator.is_left_foot_planted()
+                                     ? compute_torso_offset(Htl_desired, Htl_measured, time_delta)
+                                     : Htl_desired;
+                right_leg->Htr = !walk_generator.is_left_foot_planted()
+                                     ? compute_torso_offset(Htr_desired, Htr_measured, time_delta)
+                                     : Htr_desired;
+
+                emit(graph("control", torso_controller.get_control().x(), torso_controller.get_control().y()));
+                emit(graph("control_filter", filtered_torso_offset.x(), filtered_torso_offset.y()));
+
+                emit<Task>(left_leg);
+                emit<Task>(right_leg);
+
+                // Construct arm IK tasks
                 auto left_arm  = std::make_unique<LeftArm>();
                 auto right_arm = std::make_unique<RightArm>();
                 for (auto id : utility::input::LimbID::servos_for_limb(LimbID::RIGHT_ARM)) {
@@ -207,9 +266,40 @@ namespace module::skill {
                                walk_task.velocity_target.z()));
                     emit(graph("Walk phase", int(walk_generator.get_phase())));
                     emit(graph("Walk time", walk_generator.get_time()));
+
+                    // Generate a set of swing foot poses for visually debugging
+                    if (walk_task.velocity_target.norm() > 0) {
+                        double t = 0;
+                        while (t < cfg.walk_generator_parameters.step_period) {
+                            auto Hps = walk_generator.get_swing_foot_pose(t);
+                            auto Hpt = walk_generator.get_torso_pose(t);
+                            walk_state->swing_foot_trajectory.push_back(Hps.translation());
+                            walk_state->torso_trajectory.push_back(Hpt.translation());
+                            t += cfg.walk_generator_parameters.step_period / 10;
+                        }
+                    }
                 }
                 emit(walk_state);
             });
+    };
+    Eigen::Isometry3d Walk::compute_torso_offset(const Eigen::Isometry3d& Htp_desired,
+                                                 const Eigen::Isometry3d& Htp_measured,
+                                                 const double time_delta) {
+        // Proportional Control
+        // u = Kp * (rTPp_desired - rTPp_measured)
+        Eigen::Vector2d rTPp_desired  = Htp_desired.inverse().translation().head<2>();
+        Eigen::Vector2d rTPp_measured = Htp_measured.inverse().translation().head<2>();
+        torso_controller.update(rTPp_desired, rTPp_measured, time_delta);
+
+        // TODO: Add velocity error
+        // TODO: Add ZMP error
+
+        // Filter controller using exponential filter (leaky integrator)
+        filtered_torso_offset = cfg.torso_filter_alpha * (torso_controller.get_control() * time_delta)
+                                + (1 - cfg.torso_filter_alpha) * filtered_torso_offset;
+        auto Hpt_offset = Htp_desired.inverse();
+        Hpt_offset.translation().head<2>() += filtered_torso_offset;
+        return Hpt_offset.inverse();
     }
 
 }  // namespace module::skill

@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2023 NUbots
+ * Copyright (c) 2024 NUbots
  *
  * This file is part of the NUbots codebase.
  * See https://github.com/NUbots/NUbots for further info.
@@ -24,8 +24,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef MODULE_PURPOSE_STRIKER_HPP
-#define MODULE_PURPOSE_STRIKER_HPP
+#ifndef MODULE_PURPOSE_ALLROUNDER_HPP
+#define MODULE_PURPOSE_ALLROUNDER_HPP
 
 
 #include <Eigen/Core>
@@ -35,34 +35,23 @@
 
 namespace module::purpose {
 
-    class Striker : public ::extension::behaviour::BehaviourReactor {
+    class AllRounder : public ::extension::behaviour::BehaviourReactor {
     private:
-        /// @brief Calls Tasks to play soccer normally for a striker
+        /// @brief Calls Tasks to play soccer normally for a all rounder
         void play();
 
         /// @brief Stores configuration values
         struct Config {
             /// @brief Ready position to walk to (x, y, theta)
             Eigen::Vector3f ready_position = Eigen::Vector3f::Zero();
-            /// @brief How far (m) the ball can be away from the centre of the field for it to be deemed as
-            /// moved/touched by the other team during kickoff so we can start playing
-            double ball_kickoff_outside_radius = 0.0;
-            /// @brief x minimum bound on field to walk within
-            double bounded_region_x_min = 0.0;
-            /// @brief x maximum bound on field to walk within
-            double bounded_region_x_max = 0.0;
-            /// @brief y minimum bound on field to walk within
-            double bounded_region_y_min = 0.0;
-            /// @brief y maximum bound on field to walk within
-            double bounded_region_y_max = 0.0;
         } cfg;
 
 
     public:
-        /// @brief Called by the powerplant to build and setup the Striker reactor.
-        explicit Striker(std::unique_ptr<NUClear::Environment> environment);
+        /// @brief Called by the powerplant to build and setup the AllRounder reactor.
+        explicit AllRounder(std::unique_ptr<NUClear::Environment> environment);
     };
 
 }  // namespace module::purpose
 
-#endif  // MODULE_PURPOSE_STRIKER_HPP
+#endif  // MODULE_PURPOSE_ALLROUNDER_HPP

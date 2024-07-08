@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check for c++ changes
-        uses: dorny/paths-filter@v2
+        uses: dorny/paths-filter@v3
         id: filter
         with:
           # Considers any non-NUsight and non-VSCode config change to be a c++ change

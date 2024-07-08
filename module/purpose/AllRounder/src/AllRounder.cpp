@@ -24,19 +24,20 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include "Defender.hpp"
+#include "AllRounder.hpp"
 
 #include "extension/Behaviour.hpp"
 #include "extension/Configuration.hpp"
 
 #include "message/input/GameState.hpp"
-#include "message/purpose/Defender.hpp"
+#include "message/planning/KickTo.hpp"
+#include "message/purpose/AllRounder.hpp"
 #include "message/strategy/AlignBallToGoal.hpp"
 #include "message/strategy/FindFeature.hpp"
 #include "message/strategy/KickToGoal.hpp"
 #include "message/strategy/LookAtFeature.hpp"
+#include "message/strategy/Ready.hpp"
 #include "message/strategy/StandStill.hpp"
-#include "message/strategy/WalkInsideBoundedBox.hpp"
 #include "message/strategy/WalkToBall.hpp"
 #include "message/strategy/WalkToFieldPosition.hpp"
 
@@ -49,45 +50,43 @@ namespace module::purpose {
     using Phase    = message::input::GameState::Data::Phase;
     using GameMode = message::input::GameState::Data::Mode;
     using message::input::GameState;
-    using message::purpose::CornerKickDefender;
-    using message::purpose::DirectFreeKickDefender;
-    using message::purpose::GoalKickDefender;
-    using message::purpose::InDirectFreeKickDefender;
-    using message::purpose::NormalDefender;
-    using message::purpose::PenaltyKickDefender;
-    using message::purpose::ThrowInDefender;
+    using message::planning::KickTo;
+    using message::purpose::CornerKickAllRounder;
+    using message::purpose::DirectFreeKickAllRounder;
+    using message::purpose::GoalKickAllRounder;
+    using message::purpose::InDirectFreeKickAllRounder;
+    using message::purpose::NormalAllRounder;
+    using message::purpose::PenaltyKickAllRounder;
+    using message::purpose::PenaltyShootoutAllRounder;
+    using message::purpose::ThrowInAllRounder;
     using message::strategy::AlignBallToGoal;
     using message::strategy::FindBall;
     using message::strategy::KickToGoal;
     using message::strategy::LookAtBall;
+    using message::strategy::Ready;
     using message::strategy::StandStill;
-    using message::strategy::WalkInsideBoundedBox;
     using message::strategy::WalkToBall;
     using message::strategy::WalkToFieldPosition;
     using message::strategy::WalkToKickBall;
 
-    using DefenderTask = message::purpose::Defender;
+    using AllRounderTask = message::purpose::AllRounder;
 
     using utility::math::euler::pos_rpy_to_transform;
     using utility::support::Expression;
 
-    Defender::Defender(std::unique_ptr<NUClear::Environment> environment) : BehaviourReactor(std::move(environment)) {
-        on<Configuration>("Defender.yaml").then([this](const Configuration& config) {
-            // Use configuration here from file Defender.yaml
+    AllRounder::AllRounder(std::unique_ptr<NUClear::Environment> environment)
+        : BehaviourReactor(std::move(environment)) {
+
+        on<Configuration>("AllRounder.yaml").then([this](const Configuration& config) {
+            // Use configuration here from file AllRounder.yaml
             this->log_level    = config["log_level"].as<NUClear::LogLevel>();
             cfg.ready_position = config["ready_position"].as<Expression>();
-
-            cfg.bounded_region_x_min = config["bounded_region_x_min"].as<Expression>();
-            cfg.bounded_region_x_max = config["bounded_region_x_max"].as<Expression>();
-            cfg.bounded_region_y_min = config["bounded_region_y_min"].as<Expression>();
-            cfg.bounded_region_y_max = config["bounded_region_y_max"].as<Expression>();
         });
 
-        on<Provide<DefenderTask>, Optional<Trigger<GameState>>>().then(
-            [this](const DefenderTask& defender_task, const std::shared_ptr<const GameState>& game_state) {
-                log<NUClear::DEBUG>("DEFENDER");
+        on<Provide<AllRounderTask>, Optional<Trigger<GameState>>>().then(
+            [this](const AllRounderTask& AllRounder_task, const std::shared_ptr<const GameState>& game_state) {
                 // Do not use GameController information if force playing or force penalty shootout
-                if (defender_task.force_playing) {
+                if (AllRounder_task.force_playing) {
                     play();
                     return;
                 }
@@ -95,77 +94,78 @@ namespace module::purpose {
                 // Check if there is GameState information, and if so act based on the current mode
                 if (game_state) {
                     switch (game_state->data.mode.value) {
-                        case GameMode::NORMAL:
-                        case GameMode::OVERTIME: emit<Task>(std::make_unique<NormalDefender>()); break;
-                        case GameMode::DIRECT_FREEKICK: emit<Task>(std::make_unique<DirectFreeKickDefender>()); break;
-                        case GameMode::INDIRECT_FREEKICK:
-                            emit<Task>(std::make_unique<InDirectFreeKickDefender>());
+                        case GameMode::PENALTY_SHOOTOUT:
+                            emit<Task>(std::make_unique<PenaltyShootoutAllRounder>());
                             break;
-                        case GameMode::PENALTYKICK: emit<Task>(std::make_unique<PenaltyKickDefender>()); break;
-                        case GameMode::CORNER_KICK: emit<Task>(std::make_unique<CornerKickDefender>()); break;
-                        case GameMode::GOAL_KICK: emit<Task>(std::make_unique<GoalKickDefender>()); break;
-                        case GameMode::THROW_IN: emit<Task>(std::make_unique<ThrowInDefender>()); break;
+                        case GameMode::NORMAL:
+                        case GameMode::OVERTIME: emit<Task>(std::make_unique<NormalAllRounder>()); break;
+                        case GameMode::DIRECT_FREEKICK: emit<Task>(std::make_unique<DirectFreeKickAllRounder>()); break;
+                        case GameMode::INDIRECT_FREEKICK:
+                            emit<Task>(std::make_unique<InDirectFreeKickAllRounder>());
+                            break;
+                        case GameMode::PENALTYKICK: emit<Task>(std::make_unique<PenaltyKickAllRounder>()); break;
+                        case GameMode::CORNER_KICK: emit<Task>(std::make_unique<CornerKickAllRounder>()); break;
+                        case GameMode::GOAL_KICK: emit<Task>(std::make_unique<GoalKickAllRounder>()); break;
+                        case GameMode::THROW_IN: emit<Task>(std::make_unique<ThrowInAllRounder>()); break;
                         default: log<NUClear::WARN>("Game mode unknown.");
                     }
                 }
             });
 
-
         // Normal READY state
-        on<Provide<NormalDefender>, When<Phase, std::equal_to, Phase::READY>>().then([this] {
+        on<Provide<NormalAllRounder>, When<Phase, std::equal_to, Phase::READY>>().then([this] {
             // If we are stable, walk to the ready field position
-            log<NUClear::DEBUG>("READY");
             emit<Task>(std::make_unique<WalkToFieldPosition>(
                 pos_rpy_to_transform(Eigen::Vector3d(cfg.ready_position.x(), cfg.ready_position.y(), 0),
                                      Eigen::Vector3d(0, 0, cfg.ready_position.z()))));
         });
 
         // Normal PLAYING state
-        on<Provide<NormalDefender>, When<Phase, std::equal_to, Phase::PLAYING>>().then([this] { play(); });
+        on<Provide<NormalAllRounder>, When<Phase, std::equal_to, Phase::PLAYING>>().then([this] { play(); });
 
         // Normal UNKNOWN state
-        on<Provide<NormalDefender>, When<Phase, std::equal_to, Phase::UNKNOWN_PHASE>>().then(
+        on<Provide<NormalAllRounder>, When<Phase, std::equal_to, Phase::UNKNOWN_PHASE>>().then(
             [this] { log<NUClear::WARN>("Unknown normal game phase."); });
 
         // Default for INITIAL, SET, FINISHED, TIMEOUT
-        on<Provide<NormalDefender>>().then([this] {
-            log<NUClear::DEBUG>("INITIAL");
-            emit<Task>(std::make_unique<StandStill>());
-        });
+        on<Provide<NormalAllRounder>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
+
+        // Penalty shootout PLAYING state
+        on<Provide<PenaltyShootoutAllRounder>, When<Phase, std::equal_to, Phase::PLAYING>>().then([this] { play(); });
+
+        // Penalty shootout UNKNOWN state
+        on<Provide<PenaltyShootoutAllRounder>, When<Phase, std::equal_to, Phase::UNKNOWN_PHASE>>().then(
+            [this] { log<NUClear::WARN>("Unknown penalty shootout game phase."); });
+
+        // Default for INITIAL, READY, SET, FINISHED, TIMEOUT
+        on<Provide<PenaltyShootoutAllRounder>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
 
         // Direct free kick
-        on<Provide<DirectFreeKickDefender>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
+        on<Provide<DirectFreeKickAllRounder>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
 
         // Indirect free kick
-        on<Provide<InDirectFreeKickDefender>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
+        on<Provide<InDirectFreeKickAllRounder>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
 
         // Penalty kick
-        on<Provide<PenaltyKickDefender>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
+        on<Provide<PenaltyKickAllRounder>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
 
         // Corner kick
-        on<Provide<CornerKickDefender>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
+        on<Provide<CornerKickAllRounder>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
 
         // Goal kick
-        on<Provide<GoalKickDefender>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
+        on<Provide<GoalKickAllRounder>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
 
         // Throw in
-        on<Provide<ThrowInDefender>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
+        on<Provide<ThrowInAllRounder>>().then([this] { emit<Task>(std::make_unique<StandStill>()); });
     }
 
-    void Defender::play() {
+    void AllRounder::play() {
         // Walk to the ball and kick!
         // Second argument is priority - higher number means higher priority
         emit<Task>(std::make_unique<FindBall>(), 1);    // if the look/walk to ball tasks are not running, find the ball
         emit<Task>(std::make_unique<LookAtBall>(), 2);  // try to track the ball
         emit<Task>(std::make_unique<WalkToKickBall>(), 3);  // try to walk to the ball and align towards opponents goal
-        emit<Task>(std::make_unique<WalkInsideBoundedBox>(
-                       cfg.bounded_region_x_min,
-                       cfg.bounded_region_x_max,
-                       cfg.bounded_region_y_min,
-                       cfg.bounded_region_y_max,
-                       pos_rpy_to_transform(Eigen::Vector3d(cfg.ready_position.x(), cfg.ready_position.y(), 0),
-                                            Eigen::Vector3d(0, 0, cfg.ready_position.z()))),
-                   4);  // Patrol bounded box region
+        emit<Task>(std::make_unique<KickToGoal>(), 4);      // kick the ball if possible
     }
 
 }  // namespace module::purpose
